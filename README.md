@@ -1,6 +1,23 @@
 # Cluster Resources - Kubernetes Manifests
 
-This directory contains Kubernetes YAML manifests for deploying the CRM application and MongoDB database to the EKS cluster.
+This repository stores **Kubernetes manifests** and future **Helm charts** for deploying the CRM application and supporting services to the EKS cluster.
+
+## Repository Structure
+
+```
+.
+├── app-deployment.yaml      # CRM Application Deployment
+├── app-service.yaml         # CRM Application Service (LoadBalancer)
+├── mongodb-deployment.yaml  # MongoDB StatefulSet
+├── mongodb-service.yaml     # MongoDB Service (headless)
+├── namespace.yaml           # Default namespace configuration
+└── README.md               # This file
+```
+
+**Future structure:**
+* `k8s/` – Raw YAML manifests (Deployment, Service, ConfigMap, etc.)
+* `helm/` – Helm chart (to be created later)
+* `.github/workflows/` – Pipeline that applies manifests when a new image tag is released
 
 ## Components
 
@@ -120,7 +137,7 @@ curl http://$APP_URL/person
 
 ## Updating the Application
 
-### Manual Update (Stage 1)
+### Manual Update
 
 ```bash
 # Update image tag in app-deployment.yaml, then:
@@ -132,7 +149,7 @@ kubectl rollout status deployment/crm-app
 
 ### Via CI/CD (Automated)
 
-The GitHub Actions workflow automatically updates the deployment when new images are pushed to ECR.
+The GitHub Actions workflows in the application repository automatically build, test, and push images to ECR. This repository's pipeline will watch for new image tags and trigger `kubectl apply` / `helm upgrade` against the EKS cluster.
 
 ## Troubleshooting
 
