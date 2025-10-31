@@ -1,0 +1,9 @@
+dependencies:
+- name: crm-app
+  repository: file://./charts/crm-app
+  version: 1.0.0
+- name: mongodb
+  repository: file://./charts/mongodb
+  version: 1.0.0
+digest: sha256:ca90e02f464653c674199969dcd1f28a598d50dd4bfd1ba45a7475440845bc77
+generated: "2025-10-31T12:44:38.057609+02:00"
