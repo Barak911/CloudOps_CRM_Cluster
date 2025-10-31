@@ -1,0 +1,17 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: crm-app-metrics
+  namespace: default
+  labels:
+    app: crm-app
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: crm-app
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s
