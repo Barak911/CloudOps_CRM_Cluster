@@ -140,7 +140,16 @@ elasticsearch:
       xpack.security.http.ssl.enabled: true
 
 # Kibana Configuration
-# Stage 2: Enabled - Elasticsearch is now running with HTTPS
+# IMPORTANT: Kibana has a pre-install hook that tries to mount elasticsearch-master-certs
+# secret, which doesn't exist yet on first deployment. This causes the deployment to hang.
+#
+# The Elastic Kibana chart (v8.5.1) has hardcoded pre-install hooks with no flag to disable.
+# Solutions:
+# 1. Set enabled: false initially, deploy Elasticsearch first, then enable Kibana
+# 2. Manually delete the pre-install hook job if it gets stuck:
+#    kubectl delete job pre-install-crm-stack-kibana -n default
+# 3. Let the workflow automatically clean up stuck hooks (implemented in workflows)
+#
 kibana:
   enabled: true
   replicas: 1
