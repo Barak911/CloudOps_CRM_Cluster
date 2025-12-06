@@ -246,6 +246,19 @@ fluentd:
 
   # Override 04_outputs.conf with proper HTTPS configuration for ES8
   fileConfigs:
+    # Filter to exclude MongoDB logs to prevent Elasticsearch mapping conflicts
+    # MongoDB logs cause 400 errors due to mapping conflicts (nested objects vs simple fields)
+    # MongoDB logs are available via kubectl logs and don't need centralized logging
+    # Root cause: MongoDB's rich JSON structure (attr: {object}) conflicts with other apps' simple fields (attr: "string")
+    03_filter.conf: |-
+      <filter kubernetes.**>
+        @type grep
+        <exclude>
+          key $.kubernetes.container_name
+          pattern ^mongodb$
+        </exclude>
+      </filter>
+
     04_outputs.conf: |-
       <label @OUTPUT>
         <match **>
@@ -277,9 +290,10 @@ fluentd:
             flush_interval 5s
             retry_forever false
             retry_max_interval 30s
+            retry_max_times 10
             chunk_limit_size 2M
             queue_limit_length 8
-            overflow_action throw_exception
+            overflow_action drop_oldest_chunk
           </buffer>
         </match>
       </label>
