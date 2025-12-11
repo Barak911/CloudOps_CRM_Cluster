@@ -305,7 +305,7 @@ fluentd:
     # Order matters: most specific matches first, catch-all last
     04_outputs.conf: |-
       <label @OUTPUT>
-        # Route MongoDB logs → logs-mongodb-*
+        # Route MongoDB logs → logs-mongodb index
         <match kubernetes.var.log.containers.mongodb-**>
           @type elasticsearch
           @id out_es_mongodb
@@ -318,9 +318,10 @@ fluentd:
           user "#{ENV['FLUENT_ELASTICSEARCH_USER']}"
           password "#{ENV['FLUENT_ELASTICSEARCH_PASSWORD']}"
 
-          logstash_format true
-          logstash_prefix logs-mongodb
-          include_timestamp true
+          logstash_format false
+          index_name logs-mongodb
+          include_tag_key true
+          tag_key @log_name
 
           verify_es_version_at_startup true
           reconnect_on_error true
@@ -342,7 +343,7 @@ fluentd:
           </buffer>
         </match>
 
-        # Route CRM logs → logs-crm-*
+        # Route CRM logs → logs-crm index
         <match kubernetes.var.log.containers.crm-app-**>
           @type elasticsearch
           @id out_es_crm
@@ -355,9 +356,10 @@ fluentd:
           user "#{ENV['FLUENT_ELASTICSEARCH_USER']}"
           password "#{ENV['FLUENT_ELASTICSEARCH_PASSWORD']}"
 
-          logstash_format true
-          logstash_prefix logs-crm
-          include_timestamp true
+          logstash_format false
+          index_name logs-crm
+          include_tag_key true
+          tag_key @log_name
 
           verify_es_version_at_startup true
           reconnect_on_error true
@@ -379,7 +381,7 @@ fluentd:
           </buffer>
         </match>
 
-        # Catch-all: System logs (Elasticsearch, Kibana, Fluentd) → logs-system-*
+        # Catch-all: System logs (Elasticsearch, Kibana, Fluentd) → logs-system index
         <match kubernetes.var.log.containers.**>
           @type elasticsearch
           @id out_es_system
@@ -392,9 +394,10 @@ fluentd:
           user "#{ENV['FLUENT_ELASTICSEARCH_USER']}"
           password "#{ENV['FLUENT_ELASTICSEARCH_PASSWORD']}"
 
-          logstash_format true
-          logstash_prefix logs-system
-          include_timestamp true
+          logstash_format false
+          index_name logs-system
+          include_tag_key true
+          tag_key @log_name
 
           verify_es_version_at_startup true
           reconnect_on_error true
