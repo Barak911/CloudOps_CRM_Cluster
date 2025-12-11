@@ -319,7 +319,7 @@ fluentd:
           password "#{ENV['FLUENT_ELASTICSEARCH_PASSWORD']}"
 
           logstash_format false
-          index_name logs-mongodb
+          index_name mongodb-logs
           include_tag_key true
           tag_key @log_name
 
@@ -357,7 +357,7 @@ fluentd:
           password "#{ENV['FLUENT_ELASTICSEARCH_PASSWORD']}"
 
           logstash_format false
-          index_name logs-crm
+          index_name crm-logs
           include_tag_key true
           tag_key @log_name
 
@@ -395,7 +395,7 @@ fluentd:
           password "#{ENV['FLUENT_ELASTICSEARCH_PASSWORD']}"
 
           logstash_format false
-          index_name logs-system
+          index_name system-logs
           include_tag_key true
           tag_key @log_name
 
