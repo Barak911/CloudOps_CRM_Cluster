@@ -244,13 +244,11 @@ fluentd:
     - name: FLUENT_ELASTICSEARCH_LOGSTASH_FORMAT
       value: "true"
 
-  # Custom Fluentd configuration for multi-application logging with separate indices
-  # Logs are kept as plain text to avoid Elasticsearch mapping conflicts
-  # Separate indices allow for different retention policies and access control
+  # ECS-based logging configuration following Elasticsearch best practices
+  # Strategy: Normalize logs to ECS schema, use separate indices per app, parse JSON in ES ingest pipeline
+  # This prevents mapping conflicts by keeping 'message' as text and using namespaced fields
   fileConfigs:
-    # 02_filters.conf: Kubernetes metadata enrichment only
-    # Parsing disabled to avoid Elasticsearch field name restrictions with '$' prefixed fields
-    # Logs are kept as plain text in the 'log' field for full-text search
+    # 02_filters.conf: Kubernetes metadata enrichment + ECS normalization
     02_filters.conf: |-
       <label @KUBERNETES>
         # Standard Kubernetes metadata enrichment
@@ -270,7 +268,39 @@ fluentd:
         </match>
       </label>
 
-    # 04_outputs.conf: Route logs to separate indices based on application
+    # 03_dispatch.conf: Transform logs to ECS schema (log → message + service fields)
+    # REPLACES the default 03_dispatch.conf with our ECS transformation logic
+    # CRITICAL: Use renew_record to remove kubernetes/docker metadata that causes mapping conflicts
+    # Uses single filter with conditional Ruby logic to set service fields based on container name
+    03_dispatch.conf: |-
+      <label @DISPATCH>
+        # Single filter for all container logs - uses Ruby conditionals to set ECS fields
+        # This prevents the catch-all filter overwriting problem
+        <filter kubernetes.var.log.containers.**>
+          @type record_transformer
+          enable_ruby true
+          renew_record true
+          <record>
+            message ${record["log"]}
+            service.name ${cn = record.dig("kubernetes", "container_name") || ""; cn == "crm-app" ? "crm-app" : cn == "mongodb" ? "mongodb" : (cn.empty? ? "unknown" : cn)}
+            service.type ${cn = record.dig("kubernetes", "container_name") || ""; cn == "crm-app" ? "application" : cn == "mongodb" ? "database" : "infrastructure"}
+            event.dataset ${cn = record.dig("kubernetes", "container_name") || ""; cn == "crm-app" ? "crm.logs" : cn == "mongodb" ? "mongodb.logs" : "system.logs"}
+            host.name ${record.dig("kubernetes", "host") || "unknown"}
+            container.name ${record.dig("kubernetes", "container_name") || "unknown"}
+            kubernetes.pod.name ${record.dig("kubernetes", "pod_name") || "unknown"}
+            kubernetes.namespace ${record.dig("kubernetes", "namespace_name") || "default"}
+          </record>
+        </filter>
+
+        # Continue to @OUTPUT
+        <match **>
+          @type relabel
+          @label @OUTPUT
+        </match>
+      </label>
+
+    # 04_outputs.conf: Route logs to separate indices with ingest pipeline
+    # Uses ES ingest pipeline for JSON parsing, keeps message as text to avoid mapping conflicts
     # Order matters: most specific matches first, catch-all last
     04_outputs.conf: |-
       <label @OUTPUT>
@@ -287,10 +317,17 @@ fluentd:
           user "#{ENV['FLUENT_ELASTICSEARCH_USER']}"
           password "#{ENV['FLUENT_ELASTICSEARCH_PASSWORD']}"
 
+          # Use ingest pipeline for JSON parsing
+          pipeline logs-generic
+
+          # Use simple index name (template controls mapping)
           logstash_format false
-          index_name mongodb-logs
+          index_name logs-mongodb
           include_tag_key true
           tag_key @log_name
+
+          # Enable detailed error logging for troubleshooting
+          log_es_400_reason true
 
           verify_es_version_at_startup true
           reconnect_on_error true
@@ -325,10 +362,17 @@ fluentd:
           user "#{ENV['FLUENT_ELASTICSEARCH_USER']}"
           password "#{ENV['FLUENT_ELASTICSEARCH_PASSWORD']}"
 
+          # Use ingest pipeline for JSON parsing
+          pipeline logs-generic
+
+          # Use simple index name (template controls mapping)
           logstash_format false
-          index_name crm-logs
+          index_name logs-crm
           include_tag_key true
           tag_key @log_name
+
+          # Enable detailed error logging for troubleshooting
+          log_es_400_reason true
 
           verify_es_version_at_startup true
           reconnect_on_error true
@@ -363,10 +407,17 @@ fluentd:
           user "#{ENV['FLUENT_ELASTICSEARCH_USER']}"
           password "#{ENV['FLUENT_ELASTICSEARCH_PASSWORD']}"
 
+          # Use ingest pipeline for JSON parsing
+          pipeline logs-generic
+
+          # Use simple index name (template controls mapping)
           logstash_format false
-          index_name system-logs
+          index_name logs-system
           include_tag_key true
           tag_key @log_name
+
+          # Enable detailed error logging for troubleshooting
+          log_es_400_reason true
 
           verify_es_version_at_startup true
           reconnect_on_error true
