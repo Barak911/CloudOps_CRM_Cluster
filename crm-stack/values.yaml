@@ -198,6 +198,23 @@ fluentd:
       cpu: 100m
       memory: 256Mi
 
+  # FIX: Increase initialDelaySeconds for probes to give Fluentd time to:
+  # 1. Connect to Elasticsearch via HTTPS
+  # 2. Initialize Prometheus metrics endpoint on port 24231
+  # 3. Start tailing container log files
+  # Default was 0, causing "connection refused" on /metrics endpoint
+  livenessProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+
+  readinessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 6
+
   serviceAccount:
     create: true
 
