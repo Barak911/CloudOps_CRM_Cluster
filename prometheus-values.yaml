@@ -13,7 +13,7 @@ prometheus:
         cpu: 500m
         memory: 1Gi
 
-    # Storage configuration
+    # Storage configuration - uses default gp3 StorageClass from Terraform
     storageSpec:
       volumeClaimTemplate:
         spec:
@@ -25,8 +25,15 @@ prometheus:
     # Retention period (reduced to 2d due to disk space constraints)
     retention: 2d
 
-    # Service monitors to discover
+    # CRITICAL: Discover ServiceMonitors from ALL namespaces
+    # Prometheus runs in 'monitoring' namespace, CRM ServiceMonitor is in 'default' namespace
+    # Without these settings, cross-namespace discovery fails
     serviceMonitorSelectorNilUsesHelmValues: false
+    serviceMonitorNamespaceSelector: {}
+
+    # Also discover PodMonitors from all namespaces (for future use)
+    podMonitorSelectorNilUsesHelmValues: false
+    podMonitorNamespaceSelector: {}
 
 # Grafana configuration
 grafana:
@@ -56,6 +63,17 @@ grafana:
 
   # Pre-installed dashboards
   defaultDashboardsEnabled: true
+
+  # Enable sidecar for dashboard provisioning from ConfigMaps
+  # This automatically imports dashboards from ConfigMaps with label grafana_dashboard=1
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      # Search all namespaces for dashboard ConfigMaps
+      searchNamespace: ALL
+      folderAnnotation: grafana_folder
 
   # Datasources - use default configuration from chart
   # The chart automatically configures Prometheus as datasource
