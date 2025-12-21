@@ -1,0 +1,78 @@
+# Ingress resource for CRM CloudOps application stack
+# Routes all services through a single AWS NLB
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: crm-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    # Increase timeouts for Kibana/Grafana dashboards
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          # CRM Application - root path
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: crm-app
+                port:
+                  number: 80
+---
+# Separate Ingress for Kibana (different namespace considerations)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: kibana-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
+    # Kibana requires specific headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-Forwarded-Proto $scheme;
+      proxy_set_header X-Forwarded-Host $host;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /kibana(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: crm-stack-kibana
+                port:
+                  number: 5601
+---
+# Grafana Ingress (monitoring namespace)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  namespace: monitoring
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /grafana(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: prometheus-grafana
+                port:
+                  number: 80
