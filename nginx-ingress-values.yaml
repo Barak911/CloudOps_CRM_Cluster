@@ -18,12 +18,11 @@ controller:
       cpu: 200m
       memory: 256Mi
 
-  # Metrics for Prometheus scraping
+  # Metrics for Prometheus scraping (endpoint available, but no ServiceMonitor CRD dependency)
   metrics:
     enabled: true
     serviceMonitor:
-      enabled: true
-      namespace: monitoring
+      enabled: false
 
   # Enable snippet annotations for advanced routing
   config:
