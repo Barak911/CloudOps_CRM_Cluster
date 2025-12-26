@@ -56,10 +56,16 @@ grafana:
     enabled: true
     size: 5Gi
 
-  # Service configuration - LoadBalancer for external access
+  # Service configuration - ClusterIP for Ingress access
   service:
-    type: LoadBalancer
+    type: ClusterIP
     port: 80
+
+  # Configure Grafana to work behind Ingress at /grafana path
+  grafana.ini:
+    server:
+      root_url: "%(protocol)s://%(domain)s/grafana"
+      serve_from_sub_path: true
 
   # Pre-installed dashboards
   defaultDashboardsEnabled: true
