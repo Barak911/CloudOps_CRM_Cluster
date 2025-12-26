@@ -25,7 +25,8 @@ spec:
                 port:
                   number: 80
 ---
-# Separate Ingress for Kibana (different namespace considerations)
+# Separate Ingress for Kibana
+# Kibana is configured with server.basePath="/kibana" so we pass the path through unchanged
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -33,18 +34,16 @@ metadata:
   namespace: default
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "false"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "300"
-    # Use standard annotations instead of configuration-snippet (disabled by default)
     nginx.ingress.kubernetes.io/use-forwarded-headers: "true"
 spec:
   ingressClassName: nginx
   rules:
     - http:
         paths:
-          - path: /kibana(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /kibana
+            pathType: Prefix
             backend:
               service:
                 name: crm-stack-kibana
