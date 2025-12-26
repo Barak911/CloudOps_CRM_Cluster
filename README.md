@@ -43,12 +43,12 @@ The main `crm-stack` chart includes:
   - Health checks with mongosh
   - Resource limits: 512Mi memory, 500m CPU
 
-- **CRM Application** - Deployment with LoadBalancer service
+- **CRM Application** - Deployment with ClusterIP service
   - Configurable replica count (default: 1)
   - ECR image with dynamic tag override
   - Health checks via /health endpoint
   - Resource limits: 256Mi memory, 200m CPU
-  - LoadBalancer service on port 80
+  - ClusterIP service (accessed via Nginx Ingress)
 
 - **EFK Stack** (Optional) - Logging infrastructure
   - Elasticsearch 8.5.1
@@ -56,7 +56,17 @@ The main `crm-stack` chart includes:
   - Fluentd DaemonSet
   - Disabled by default for initial deployment
 
-### 2. Logging Stack
+### 2. Nginx Ingress Controller
+
+Single entry point for all services via AWS Network Load Balancer:
+- Deployed to `ingress-nginx` namespace
+- Path-based routing to services:
+  - `/` → CRM Application
+  - `/kibana` → Kibana Dashboard
+  - `/grafana` → Grafana (when Prometheus enabled)
+- Configuration: `nginx-ingress-values.yaml`
+
+### 3. Logging Stack
 
 Separate Helm chart for comprehensive EFK (Elasticsearch, Fluentd, Kibana) logging infrastructure.
 
@@ -180,15 +190,17 @@ kubectl get pods -l app=crm-app
 kubectl get svc -l app=crm-app
 ```
 
-### Get Application URL
+### Get Application URL (via Nginx Ingress)
 
 ```bash
-# Get LoadBalancer URL
-kubectl get service crm-stack-crm-app -n default
+# Get Ingress LoadBalancer URL
+kubectl get service ingress-nginx-controller -n ingress-nginx
 
 # Or with jsonpath
-export APP_URL=$(kubectl get service crm-stack-crm-app -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-echo "Application URL: http://$APP_URL"
+export INGRESS_URL=$(kubectl get service ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+echo "CRM Application: http://$INGRESS_URL/"
+echo "Kibana:          http://$INGRESS_URL/kibana"
+echo "Grafana:         http://$INGRESS_URL/grafana"
 ```
 
 ## Testing the Deployment
@@ -206,33 +218,33 @@ kubectl logs -l app=crm-app --tail=50
 ### Test Application Endpoints
 
 ```bash
-# Get LoadBalancer URL
-APP_URL=$(kubectl get service crm-stack-crm-app -n default -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+# Get Ingress URL
+INGRESS_URL=$(kubectl get service ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 
 # Test health endpoint
-curl http://$APP_URL/health
+curl http://$INGRESS_URL/health
 
 # Test root endpoint
-curl http://$APP_URL/
+curl http://$INGRESS_URL/
 
 # Add a person
-curl -X POST http://$APP_URL/person/123 \
+curl -X POST http://$INGRESS_URL/person/123 \
   -H "Content-Type: application/json" \
   -d '{"name":"John Doe","email":"john@example.com","phone":"555-1234"}'
 
 # Get all persons
-curl http://$APP_URL/person
+curl http://$INGRESS_URL/person
 
 # Get person by ID
-curl http://$APP_URL/person/123
+curl http://$INGRESS_URL/person/123
 
 # Update person
-curl -X PUT http://$APP_URL/person/123 \
+curl -X PUT http://$INGRESS_URL/person/123 \
   -H "Content-Type: application/json" \
   -d '{"name":"John Updated","email":"updated@example.com","phone":"555-9999"}'
 
 # Delete person
-curl -X DELETE http://$APP_URL/person/123
+curl -X DELETE http://$INGRESS_URL/person/123
 ```
 
 ## Updating the Application
@@ -289,10 +301,12 @@ kubectl apply -f crm-servicemonitor.yaml
 ### Access Kibana (if EFK enabled)
 
 ```bash
-# Get Kibana LoadBalancer URL
-kubectl get service crm-stack-kibana -n default
+# Get Ingress URL
+INGRESS_URL=$(kubectl get service ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
 
-# Access Kibana UI
+# Access Kibana via Ingress
+echo "Kibana URL: http://$INGRESS_URL/kibana"
+
 # Default credentials: elastic / <password from elasticsearch-master-credentials secret>
 ```
 
@@ -430,7 +444,7 @@ The workflow:
 
 - MongoDB uses persistent storage - data survives pod restarts and redeployments
 - PersistentVolumeClaims must be manually deleted when uninstalling
-- LoadBalancer service creates an AWS Classic ELB - costs apply
+- Single Nginx Ingress LoadBalancer serves all services (reduces AWS costs)
 - Helm release name `crm-stack` prefixes all resource names
 - Resource names: `crm-stack-crm-app`, `crm-stack-mongodb`
 - Health checks ensure traffic only routes to healthy pods
@@ -439,28 +453,42 @@ The workflow:
 
 ## Architecture
 
-**CRM Application Stack:**
+**CRM Application Stack (with Nginx Ingress):**
 ```
-┌─────────────────────────────────────────────┐
-│  AWS Classic LoadBalancer                   │
-│  (created by crm-stack-crm-app service)     │
-└────────────────┬────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────┐
-│  CRM Application Pods (crm-stack-crm-app)   │
-│  - Deployment (1+ replicas)                 │
-│  - Health checks on /health                 │
-│  - Connects to MongoDB via internal DNS     │
-└────────────────┬────────────────────────────┘
-                 │
-                 ▼
-┌─────────────────────────────────────────────┐
-│  MongoDB StatefulSet (crm-stack-mongodb)    │
-│  - 1 replica with persistent storage        │
-│  - Headless service for stable identity     │
-│  - 5Gi PersistentVolume                     │
-└─────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│            AWS Network Load Balancer (NLB)              │
+│        (single LoadBalancer for all services)           │
+└────────────────────────┬────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│           Nginx Ingress Controller                      │
+│              (ingress-nginx namespace)                  │
+└────────────────────────┬────────────────────────────────┘
+                         │
+        ┌────────────────┼────────────────┐
+        ▼                ▼                ▼
+   ┌─────────┐    ┌───────────┐    ┌──────────┐
+   │ /       │    │ /kibana   │    │ /grafana │
+   │ CRM App │    │ Kibana    │    │ Grafana  │
+   │ :80     │    │ :5601     │    │ :80      │
+   └────┬────┘    └───────────┘    └──────────┘
+        │         (ClusterIP)      (ClusterIP)
+        ▼
+┌─────────────────────────────────────────────────────────┐
+│  CRM Application Pods (crm-stack-crm-app)               │
+│  - Deployment (1+ replicas)                             │
+│  - Health checks on /health                             │
+│  - Connects to MongoDB via internal DNS                 │
+└────────────────────────┬────────────────────────────────┘
+                         │
+                         ▼
+┌─────────────────────────────────────────────────────────┐
+│  MongoDB StatefulSet (crm-stack-mongodb)                │
+│  - 1 replica with persistent storage                    │
+│  - Headless service for stable identity                 │
+│  - 5Gi PersistentVolume                                 │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ## Support
