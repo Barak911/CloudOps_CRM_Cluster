@@ -6,29 +6,25 @@ This repository contains **Helm charts** for deploying the CRM application stack
 
 ```
 .
-├── crm-stack/                    # Main CRM application Helm chart (umbrella)
-│   ├── Chart.yaml               # Chart metadata and dependencies
-│   ├── values.yaml              # Unified configuration for all components
+├── crm-stack/                      # Main CRM application Helm chart (umbrella)
+│   ├── Chart.yaml                 # Chart metadata and dependencies
+│   ├── values.yaml                # Unified configuration for all components
 │   └── charts/
-│       ├── mongodb/             # MongoDB StatefulSet subchart
+│       ├── mongodb/               # MongoDB StatefulSet subchart
 │       │   ├── Chart.yaml
 │       │   └── templates/
-│       │       ├── statefulset.yaml
-│       │       └── service.yaml
-│       └── crm-app/             # CRM application Deployment subchart
+│       └── crm-app/               # CRM application Deployment subchart
 │           ├── Chart.yaml
 │           └── templates/
-│               ├── deployment.yaml
-│               └── service.yaml
 │
-├── logging-stack/               # EFK logging infrastructure Helm chart
-│   ├── Chart.yaml
-│   ├── values.yaml
-│   └── templates/
-│
-├── crm-servicemonitor.yaml      # Prometheus ServiceMonitor for metrics
-├── kibana-standalone-values.yaml # Standalone Kibana configuration
-└── README.md                    # This file
+├── crm-ingress.yaml               # Ingress routing rules (CRM, Kibana)
+├── crm-servicemonitor.yaml        # Prometheus ServiceMonitor for metrics
+├── crm-dashboard-configmap.yaml   # Grafana dashboard for CRM metrics
+├── nginx-ingress-values.yaml      # Nginx Ingress Controller configuration
+├── values-ingress.yaml            # ClusterIP overrides for Ingress mode
+├── prometheus-values.yaml         # Prometheus/Grafana stack configuration
+├── prometheus-values-ingress.yaml # Grafana Ingress subpath configuration
+└── README.md                      # This file
 ```
 
 ## Components
@@ -292,28 +288,70 @@ helm rollback crm-stack 2 -n default
 
 ## Monitoring and Observability
 
-### Deploy Prometheus ServiceMonitor
+### 4. Monitoring Stack (Optional)
+
+Deploy Prometheus + Grafana via kube-prometheus-stack:
+
+```bash
+# Add Helm repository
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
+# Deploy monitoring stack
+helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+  --namespace monitoring \
+  --create-namespace \
+  -f prometheus-values.yaml \
+  -f prometheus-values-ingress.yaml \
+  --wait --timeout 10m
+```
+
+### Deploy CRM ServiceMonitor
 
 ```bash
 kubectl apply -f crm-servicemonitor.yaml
 ```
 
-### Access Kibana (if EFK enabled)
+This creates a ServiceMonitor that tells Prometheus to scrape the CRM app's `/metrics` endpoint.
+
+### Deploy CRM Grafana Dashboard
 
 ```bash
-# Get Ingress URL
-INGRESS_URL=$(kubectl get service ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-
-# Access Kibana via Ingress
-echo "Kibana URL: http://$INGRESS_URL/kibana"
-
-# Default credentials: elastic / <password from elasticsearch-master-credentials secret>
+kubectl apply -f crm-dashboard-configmap.yaml
 ```
 
-### View Elasticsearch Password
+Grafana's sidecar automatically imports dashboards from ConfigMaps with label `grafana_dashboard=1`.
+
+### Access Kibana (Logging)
 
 ```bash
-kubectl get secret elasticsearch-master-credentials -n default -o jsonpath='{.data.password}' | base64 -d
+INGRESS_URL=$(kubectl get service ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+echo "Kibana URL: http://$INGRESS_URL/kibana"
+
+# Get credentials
+ES_PASSWORD=$(kubectl get secret elasticsearch-master-credentials -n default -o jsonpath='{.data.password}' | base64 -d)
+echo "Username: elastic"
+echo "Password: $ES_PASSWORD"
+```
+
+### Access Grafana (Monitoring)
+
+```bash
+INGRESS_URL=$(kubectl get service ingress-nginx-controller -n ingress-nginx -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+echo "Grafana URL: http://$INGRESS_URL/grafana"
+echo "Username: admin"
+echo "Password: admin"
+```
+
+### Test Application Metrics
+
+```bash
+# Test /metrics endpoint
+curl http://$INGRESS_URL/metrics | head -20
+
+# Check Prometheus is scraping
+kubectl exec -n monitoring prometheus-prometheus-kube-prometheus-prometheus-0 -c prometheus \
+  -- wget -qO- "http://localhost:9090/api/v1/targets" | grep crm-app
 ```
 
 ## Troubleshooting
