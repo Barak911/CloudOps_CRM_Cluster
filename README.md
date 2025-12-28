@@ -288,9 +288,9 @@ helm rollback crm-stack 2 -n default
 
 ## Monitoring and Observability
 
-### 4. Monitoring Stack (Optional)
+### 4. Monitoring Stack
 
-Deploy Prometheus + Grafana via kube-prometheus-stack:
+Deploy Prometheus + Grafana via kube-prometheus-stack (deployed automatically by full-deploy.yml):
 
 ```bash
 # Add Helm repository
@@ -466,17 +466,17 @@ kubectl get all,pvc -n default
 
 ## CI/CD Integration
 
-This repository is designed to work with the GitHub Actions workflow in the application repository:
-- **Workflow**: `.github/workflows/initial-deploy.yml`
+This repository is designed to work with the GitHub Actions workflows in the application repository:
+- **Workflows**: `.github/workflows/cicd.yml`, `full-deploy.yml`, `cleanup-deployment.yml`
 - **Repository**: `Barak911/CloudOps_CRM`
 
-The workflow:
-1. Builds and tests the application
-2. Pushes Docker image to ECR
-3. Clones this cluster-resources repository
-4. Deploys using Helm with the new image tag
-5. Runs integration tests
-6. Generates deployment report
+The workflows:
+1. Build and test the application
+2. Push Docker image to ECR
+3. Clone this cluster-resources repository
+4. Deploy using Helm with the new image tag
+5. Run integration tests
+6. Generate deployment report
 
 ## Important Notes
 
