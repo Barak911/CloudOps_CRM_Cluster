@@ -140,22 +140,13 @@ elasticsearch:
       xpack.security.http.ssl.enabled: true
 
 # Kibana Configuration
+# NOTE: The Elastic Kibana Helm chart (v8.5.1) is ARCHIVED and has known bugs:
+#   - Issue #1766: Pre-upgrade hook fails with "secret already exists"
+#   - The hook uses POST instead of PUT to create K8s secrets
+# Workaround: CI/CD pipeline deletes the token secret before upgrade and uses --no-hooks
 kibana:
   enabled: true
   replicas: 1
-
-  # Phase 1: Force Helm to clean up zombied hook jobs from failed runs
-  # This prevents "resource already exists" errors and timeout loops
-  lifecycleHooks:
-    preStop:
-      exec:
-        command: ["/bin/sh", "-c", "echo 'Kibana stopping'"]
-
-  # Hook delete policy - clean up hook jobs automatically
-  # before-hook-creation: delete previous hook before creating new one
-  # hook-succeeded: delete hook after successful completion
-  annotations:
-    "helm.sh/hook-delete-policy": "before-hook-creation,hook-succeeded"
 
   resources:
     requests:
